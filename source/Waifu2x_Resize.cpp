@@ -69,6 +69,48 @@ int Waifu2x_Resize_Data::arguments_process(const VSMap *in, VSMap *out)
         return 1;
     }
 
+    // shift_w - float
+    para.shift_w = vsapi->propGetFloat(in, "shift_w", 0, &error);
+
+    if (error)
+    {
+        para.shift_w = para_default.shift_w;
+    }
+
+    // shift_h - float
+    para.shift_h = vsapi->propGetFloat(in, "shift_h", 0, &error);
+
+    if (error)
+    {
+        para.shift_h = para_default.shift_h;
+    }
+
+    // subwidth - float
+    para.subwidth = vsapi->propGetFloat(in, "subwidth", 0, &error);
+
+    if (error)
+    {
+        para.subwidth = para_default.subwidth;
+    }
+    else if (para.subwidth < 0 && para.shift_w - para.subwidth >= vi->width)
+    {
+        setError(out, "the source width set by \"shift_w\" and \"subwidth\" must be positive");
+        return 1;
+    }
+
+    // subheight - float
+    para.subheight = vsapi->propGetFloat(in, "subheight", 0, &error);
+
+    if (error)
+    {
+        para.subheight = para_default.subheight;
+    }
+    else if (para.subheight < 0 && para.shift_h - para.subheight >= vi->width)
+    {
+        setError(out, "the source width set by \"shift_h\" and \"subheight\" must be positive");
+        return 1;
+    }
+
     // filter - data
     auto filter_cstr = vsapi->propGetData(in, "filter", 0, &error);
 
@@ -205,9 +247,11 @@ int Waifu2x_Resize_Data::arguments_process(const VSMap *in, VSMap *out)
 
 void Waifu2x_Resize_Data::init(VSCore *core)
 {
-    // Initialize z_resize
+    // Process resizing parameters
     int src_width = vi->width;
     int src_height = vi->height;
+    int sr_width = src_width * sr_ratio;
+    int sr_height = src_height * sr_ratio;
     int dst_width = para.width;
     int dst_height = para.height;
     double shift_w = para.shift_w;
@@ -217,7 +261,6 @@ void Waifu2x_Resize_Data::init(VSCore *core)
 
     double scaleH = static_cast<double>(dst_width) / subwidth;
     double scaleV = static_cast<double>(dst_height) / subheight;
-    scale = Max(scaleH, scaleV);
     double sub_w = 1 << vi->format->subSamplingW;
     double sub_h = 1 << vi->format->subSamplingH;
 
@@ -225,7 +268,7 @@ void Waifu2x_Resize_Data::init(VSCore *core)
     double sHCPlace = sCLeftAlign ? 0 : 0.5 - sub_w / 2;
     double sVCPlace = 0;
     bool dCLeftAlign = para.chroma_loc == CHROMA_LOC_MPEG2;
-    double dHCPlace = dCLeftAlign ? 0 : 0.5 - sub_h / 2;
+    double dHCPlace = dCLeftAlign ? 0 : 0.5 - sub_w / 2;
     double dVCPlace = 0;
 
     int src_width_uv = src_width >> vi->format->subSamplingW;
@@ -237,26 +280,37 @@ void Waifu2x_Resize_Data::init(VSCore *core)
     double subwidth_uv = subwidth / sub_w;
     double subheight_uv = subheight / sub_h;
 
-    init_z_resize(z_resize_pre, ZIMG_RESIZE_POINT, src_width, src_height,
-        dst_width, dst_height, shift_w, shift_h, subwidth, subheight,
+    // Additional parameters
+    resize_post = !(dst_width == sr_width && dst_height == sr_height
+        && shift_w == 0 && shift_h == 0 && subwidth == sr_width && subheight == sr_height);
+
+    // Initialize z_resize
+    init_z_resize(z_resize_pre, ZIMG_RESIZE_POINT,
+        src_width, src_height, sr_width, sr_height,
+        0, 0, src_width, src_height,
+        0, 0.5);
+    if (resize_post) init_z_resize(z_resize_post, para.filter,
+        sr_width, sr_height, dst_width, dst_height,
+        shift_w * sr_ratio, shift_h * sr_ratio, subwidth * sr_ratio, subheight * sr_ratio,
         para.filter_param_a, para.filter_param_b);
     init_z_resize(z_resize_uv, para.filter_uv,
-        src_width_uv, src_height_uv, dst_width_uv, dst_height_uv, shift_w_uv, shift_h_uv, subwidth_uv, subheight_uv,
+        src_width_uv, src_height_uv, dst_width_uv, dst_height_uv,
+        shift_w_uv, shift_h_uv, subwidth_uv, subheight_uv,
         para.filter_param_a_uv, para.filter_param_b_uv);
 
     // Initialize waifu2x
-    init_waifu2x(waifu2x, waifu2x_mutex, 0, dst_width, dst_height, core, vsapi);
+    init_waifu2x(waifu2x, waifu2x_mutex, 0, sr_width, sr_height, core, vsapi);
 }
 
 
 void Waifu2x_Resize_Data::release()
 {
     delete z_resize_pre;
-    delete z_resize;
+    delete z_resize_post;
     delete z_resize_uv;
 
     z_resize_pre = nullptr;
-    z_resize = nullptr;
+    z_resize_post = nullptr;
     z_resize_uv = nullptr;
 }
 
@@ -264,11 +318,11 @@ void Waifu2x_Resize_Data::release()
 void Waifu2x_Resize_Data::moveFrom(_Myt &right)
 {
     z_resize_pre = right.z_resize_pre;
-    z_resize = right.z_resize;
+    z_resize_post = right.z_resize_post;
     z_resize_uv = right.z_resize_uv;
     
     right.z_resize_pre = nullptr;
-    right.z_resize = nullptr;
+    right.z_resize_post = nullptr;
     right.z_resize_uv = nullptr;
 }
 
@@ -286,42 +340,34 @@ void Waifu2x_Resize_Data::init_z_resize(ZimgResizeContext *&context,
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
+const int pixel_type = ZIMG_PIXEL_FLOAT;
+
+
 void Waifu2x_Resize_Process::Kernel(FLType *dst, const FLType *src) const
 {
-    FLType *tempY = nullptr;
-
-    AlignedMalloc(tempY, dst_pcount[0]);
-
-    const int pixel_type = ZIMG_PIXEL_FLOAT;
     void *buf = nullptr;
-    size_t buf_size = d.z_resize_pre->tmp_size(pixel_type);
+    size_t buf_size_pre = d.z_resize_pre->tmp_size(pixel_type);
+    size_t buf_size_post = d.resize_post ? d.z_resize_post->tmp_size(pixel_type) : 0;
+    size_t buf_size = std::max(buf_size_pre, buf_size_post);
     VS_ALIGNED_MALLOC(&buf, buf_size, 32);
 
-    d.z_resize_pre->process(src, tempY, buf, src_width[0], src_height[0], dst_width[0], dst_height[0],
-        src_stride[0] * sizeof(FLType), dst_stride[0] * sizeof(FLType), pixel_type);
-    waifu2x->process(dst, tempY, dst_width[0], dst_height[0], dst_stride[0], false);
+    Kernel_Y(dst, src, buf);
 
     VS_ALIGNED_FREE(buf);
-    AlignedFree(tempY);
 }
 
 
 void Waifu2x_Resize_Process::Kernel(FLType *dstY, FLType *dstU, FLType *dstV,
     const FLType *srcY, const FLType *srcU, const FLType *srcV) const
 {
-    FLType *tempY = nullptr;
-    AlignedMalloc(tempY, dst_pcount[0]);
-
-    const int pixel_type = ZIMG_PIXEL_FLOAT;
     void *buf = nullptr;
-    size_t buf_size = d.z_resize_pre->tmp_size(pixel_type);
+    size_t buf_size_pre = d.z_resize_pre->tmp_size(pixel_type);
+    size_t buf_size_post = d.resize_post ? d.z_resize_post->tmp_size(pixel_type) : 0;
     size_t buf_size_uv = d.z_resize_uv->tmp_size(pixel_type);
-    buf_size = buf_size_uv > buf_size ? buf_size_uv : buf_size;
+    size_t buf_size = std::max(std::max(buf_size_pre, buf_size_post), buf_size_uv);
     VS_ALIGNED_MALLOC(&buf, buf_size, 32);
 
-    d.z_resize_pre->process(srcY, tempY, buf, src_width[0], src_height[0], dst_width[0], dst_height[0],
-        src_stride[0] * sizeof(FLType), dst_stride[0] * sizeof(FLType), pixel_type);
-    waifu2x->process(dstY, tempY, dst_width[0], dst_height[0], dst_stride[0], false);
+    Kernel_Y(dstY, srcY, buf);
 
     d.z_resize_uv->process(srcU, dstU, buf, src_width[1], src_height[1], dst_width[1], dst_height[1],
         src_stride[1] * sizeof(FLType), dst_stride[1] * sizeof(FLType), pixel_type);
@@ -329,7 +375,24 @@ void Waifu2x_Resize_Process::Kernel(FLType *dstY, FLType *dstU, FLType *dstV,
         src_stride[2] * sizeof(FLType), dst_stride[2] * sizeof(FLType), pixel_type);
 
     VS_ALIGNED_FREE(buf);
-    AlignedFree(tempY);
+}
+
+
+void Waifu2x_Resize_Process::Kernel_Y(FLType *dst, const FLType *src, void *buf) const
+{
+    FLType *temp1 = nullptr, *temp2 = nullptr;
+    AlignedMalloc(temp1, sr_pcount);
+    if (d.resize_post) AlignedMalloc(temp2, sr_pcount);
+    else temp2 = dst;
+
+    d.z_resize_pre->process(src, temp1, buf, src_width[0], src_height[0], sr_width, sr_height,
+        src_stride[0] * sizeof(FLType), sr_stride * sizeof(FLType), pixel_type);
+    waifu2x->process(temp2, temp1, sr_width, sr_height, sr_stride, false);
+    if (d.resize_post) d.z_resize_post->process(temp2, dst, buf, sr_width, sr_height, dst_width[0], dst_height[0],
+        sr_stride * sizeof(FLType), dst_stride[0] * sizeof(FLType), pixel_type);
+
+    AlignedFree(temp1);
+    if (d.resize_post) AlignedFree(temp2);
 }
 
 

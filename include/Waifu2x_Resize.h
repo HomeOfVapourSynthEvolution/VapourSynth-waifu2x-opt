@@ -34,12 +34,13 @@ public:
     typedef Waifu2x_Resize_Data _Myt;
     typedef Waifu2x_Data_Base _Mybase;
 
-protected:
-    double scale = 1;
-
 public:
+    int sr_times = 1;
+    int sr_ratio = 1 << sr_times;
+    bool resize_post = true;
+
     ZimgResizeContext *z_resize_pre = nullptr;
-    ZimgResizeContext *z_resize = nullptr;
+    ZimgResizeContext *z_resize_post = nullptr;
     ZimgResizeContext *z_resize_uv = nullptr;
 
 public:
@@ -95,10 +96,31 @@ public:
 private:
     const _Mydata &d;
 
+protected:
+    PCType sr_height;
+    PCType sr_width;
+    PCType sr_stride;
+    PCType sr_pcount;
+
 public:
     Waifu2x_Resize_Process(const _Mydata &_d, int _n, VSFrameContext *_frameCtx, VSCore *_core, const VSAPI *_vsapi)
         : _Mybase(_d, _n, _frameCtx, _core, _vsapi), d(_d)
-    {}
+    {
+        if (d.resize_post)
+        {
+            sr_height = src_height[0] * d.sr_ratio;
+            sr_width = src_width[0] * d.sr_ratio;
+            sr_stride = src_stride[0] * d.sr_ratio;
+            sr_pcount = sr_height * sr_stride;
+        }
+        else
+        {
+            sr_height = dst_height[0];
+            sr_width = dst_width[0];
+            sr_stride = dst_stride[0];
+            sr_pcount = sr_height * sr_stride;
+        }
+    }
 
 protected:
     virtual void NewFrame() override
@@ -110,6 +132,8 @@ protected:
 
     virtual void Kernel(FLType *dstY, FLType *dstU, FLType *dstV,
         const FLType *srcY, const FLType *srcU, const FLType *srcV) const override;
+
+    void Kernel_Y(FLType *dst, const FLType *src, void *buf) const;
 };
 
 
