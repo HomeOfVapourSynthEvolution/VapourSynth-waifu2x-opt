@@ -299,7 +299,8 @@ void Waifu2x_Resize_Data::init(VSCore *core)
         para.filter_param_a_uv, para.filter_param_b_uv);
 
     // Initialize waifu2x
-    init_waifu2x(waifu2x, waifu2x_mutex, 0, sr_width, sr_height, core, vsapi);
+    init_waifu2x(waifu2x, waifu2x_mutex, 0, USE_INTERNAL_MT ? para.threads : 1,
+        sr_width, sr_height, para.block_width, para.block_height, core, vsapi);
 }
 
 

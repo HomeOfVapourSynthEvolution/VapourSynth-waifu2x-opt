@@ -63,7 +63,8 @@ int Waifu2x_Denoise_Data::arguments_process(const VSMap *in, VSMap *out)
 void Waifu2x_Denoise_Data::init(VSCore *core)
 {
     // Initialize waifu2x
-    init_waifu2x(waifu2x, waifu2x_mutex, para.mode, vi->width, vi->height, core, vsapi);
+    init_waifu2x(waifu2x, waifu2x_mutex, para.mode, USE_INTERNAL_MT ? para.threads : 1,
+        vi->width, vi->height, para.block_width, para.block_height, core, vsapi);
 }
 
 

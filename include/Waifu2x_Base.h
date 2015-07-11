@@ -28,11 +28,22 @@
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Constants
+
+
+const bool USE_VAPOURSYNTH_MT = true;
+const bool USE_INTERNAL_MT = true;
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 struct Waifu2x_Para
 {
     // General parameters
+    PCType block_width = 1280;
+    PCType block_height = 1280;
+    int threads = 1;
     ColorMatrix matrix = ColorMatrix::smpte170m;
     bool full = true;
 
@@ -108,7 +119,10 @@ protected:
 
 protected:
     static void init_waifu2x(std::vector<Waifu2x *> &context, std::vector<std::mutex *> &mutex,
-        int model, PCType width, PCType height, VSCore *core, const VSAPI *vsapi);
+        int model, int threads, PCType width, PCType height, PCType block_width, PCType block_height,
+        VSCore *core, const VSAPI *vsapi);
+
+    static PCType waifu2x_get_optimal_block_size(PCType size, PCType block_size, PCType padding);
 };
 
 

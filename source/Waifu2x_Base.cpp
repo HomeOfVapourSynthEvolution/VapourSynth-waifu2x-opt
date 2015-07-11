@@ -18,6 +18,7 @@
 
 
 #include <fstream>
+#include <algorithm>
 #include "Waifu2x_Base.h"
 
 
@@ -77,6 +78,36 @@ int Waifu2x_Data_Base::arguments_process(const VSMap *in, VSMap *out)
             para.full = true;
         }
     }
+
+    // block_width - int
+    para.block_width = int64ToIntS(vsapi->propGetInt(in, "block_width", 0, &error));
+
+    if (error)
+    {
+        para.block_width = para_default.block_width;
+    }
+
+    // block_height - int
+    para.block_height = int64ToIntS(vsapi->propGetInt(in, "block_height", 0, &error));
+
+    if (error)
+    {
+        para.block_height = para_default.block_height;
+    }
+
+    // threads - int
+    para.threads = int64ToIntS(vsapi->propGetInt(in, "threads", 0, &error));
+
+    if (error)
+    {
+        para.threads = para_default.threads;
+    }
+    else if (para.threads < 0)
+    {
+        setError(out, "Invalid \"threads\" assigned, must be a non-negative interger");
+        return 1;
+    }
+
     /*
     // depth - int
     para.depth = int64ToIntS(vsapi->propGetInt(in, "depth", 0, &error));
@@ -163,7 +194,8 @@ void Waifu2x_Data_Base::moveFrom(_Myt &right)
 
 
 void Waifu2x_Data_Base::init_waifu2x(std::vector<Waifu2x *> &context, std::vector<std::mutex *> &mutex,
-    int model, PCType width, PCType height, VSCore *core, const VSAPI *vsapi)
+    int model, int threads, PCType width, PCType height, PCType block_width, PCType block_height,
+    VSCore *core, const VSAPI *vsapi)
 {
     // Get model file name
     std::string model_name;
@@ -197,21 +229,51 @@ void Waifu2x_Data_Base::init_waifu2x(std::vector<Waifu2x *> &context, std::vecto
     }
 
     // Create a Waifu2x filter object for each thread
-    const int threads = vsapi->getCoreInfo(core)->numThreads;
-    context.resize(threads);
-    mutex = std::vector<std::mutex *>(threads, nullptr);
+    const int vscore_threads = USE_VAPOURSYNTH_MT ? vsapi->getCoreInfo(core)->numThreads : 1;
+    context.resize(vscore_threads);
+    mutex = std::vector<std::mutex *>(vscore_threads, nullptr);
 
     for (auto &x : context)
     {
         x = new Waifu2x(oss.str());
-        x->set_num_threads(1);
+
+        x->set_num_threads(threads);
+
         const int padding = x->num_steps() * 2;
-        x->set_image_block_size(width + padding, height + padding);
+        block_width = waifu2x_get_optimal_block_size(width, block_width, padding);
+        block_height = waifu2x_get_optimal_block_size(height, block_height, padding);
+        x->set_image_block_size(block_width, block_height);
     }
 
     for (auto &x : mutex)
     {
         x = new std::mutex();
+    }
+}
+
+
+PCType Waifu2x_Data_Base::waifu2x_get_optimal_block_size(PCType size, PCType block_size, PCType padding)
+{
+    if (block_size < 0)
+    {
+        return -block_size;
+    }
+    else if (block_size == 0)
+    {
+        return size + padding;
+    }
+    else
+    {
+        int optimal_block_size;
+        int divisor = 0;
+
+        do
+        {
+            ++divisor;
+            optimal_block_size = (size + divisor - 1) / divisor;
+        } while (optimal_block_size > block_size);
+
+        return optimal_block_size + padding;
     }
 }
 
@@ -223,7 +285,7 @@ void Waifu2x_Process_Base::set_mutex(std::vector<Waifu2x *> &context, std::vecto
 {
     release_mutex();
 
-    for (int i = 0; i < mutex.size(); ++i)
+    for (size_t i = 0; i < mutex.size(); ++i)
     {
         if (mutex[i]->try_lock())
         {

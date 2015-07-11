@@ -73,7 +73,8 @@ static void VS_CC Waifu2x_Denoise_Create(const VSMap *in, VSMap *out, void *user
     d->init(core);
 
     // Create filter
-    vsapi->createFilter(in, out, "Denoise", Waifu2x_Denoise_Init, Waifu2x_Denoise_GetFrame, Waifu2x_Denoise_Free, fmParallel, 0, d, core);
+    vsapi->createFilter(in, out, "Denoise", Waifu2x_Denoise_Init, Waifu2x_Denoise_GetFrame, Waifu2x_Denoise_Free,
+        USE_VAPOURSYNTH_MT ? fmParallel : fmUnordered, 0, d, core);
 }
 
 
@@ -133,7 +134,8 @@ static void VS_CC Waifu2x_Resize_Create(const VSMap *in, VSMap *out, void *userD
     d->init(core);
 
     // Create filter
-    vsapi->createFilter(in, out, "Resize", Waifu2x_Resize_Init, Waifu2x_Resize_GetFrame, Waifu2x_Resize_Free, fmParallel, 0, d, core);
+    vsapi->createFilter(in, out, "Resize", Waifu2x_Resize_Init, Waifu2x_Resize_GetFrame, Waifu2x_Resize_Free,
+        USE_VAPOURSYNTH_MT ? fmParallel : fmUnordered, 0, d, core);
 }
 
 
@@ -151,7 +153,10 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegiste
         "input:clip;"
         "mode:int:opt;"
         "matrix:int:opt;"
-        "full:int:opt;",
+        "full:int:opt;"
+        "block_width:int:opt;"
+        "block_height:int:opt;"
+        "threads:int:opt;",
         Waifu2x_Denoise_Create, nullptr, plugin);
 
     registerFunc("Resize",
@@ -170,7 +175,10 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegiste
         "filter_param_b_uv:float:opt;"
         "chroma_loc:data:opt;"
         "matrix:int:opt;"
-        "full:int:opt;",
+        "full:int:opt;"
+        "block_width:int:opt;"
+        "block_height:int:opt;"
+        "threads:int:opt;",
         Waifu2x_Resize_Create, nullptr, plugin);
 }
 
