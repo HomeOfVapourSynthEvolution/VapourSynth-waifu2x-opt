@@ -271,7 +271,7 @@ int Waifu2x_Resize_Data::arguments_process(const VSMap *in, VSMap *out)
 
     if (error)
     {
-        para.chroma_loc_out = para_default.chroma_loc_out;
+        para.chroma_loc_out = para.chroma_loc_in;
     }
     else
     {
