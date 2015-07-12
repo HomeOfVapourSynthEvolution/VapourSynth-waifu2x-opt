@@ -8,9 +8,9 @@ waifu2x image super-resolution/denoise filter for VapourSynth, based on the waif
 
 It's a high quality image restoration filter for anime, mainly for super-resolution, also contains 2 denoising modes.
 
-This plugin employs waifu2x-opt library (https://github.com/logicmachine/waifu2x-opt) and zimg library (https://github.com/sekrit-twc/zimg) for scaling ralated stuffs. Thanks for their works!
+This plugin employs waifu2x-opt library (https://github.com/logicmachine/waifu2x-opt) and zimg library (https://github.com/sekrit-twc/zimg) for scaling related stuffs. Thanks for their works!
 
-Note that the waifu2x-opt is dynamic linked (requires waifu2x.dll) while the zimg is static linked.
+Note that the waifu2x-opt is dynamic linked while the zimg is static linked.
 
 Also the waifu2x-opt requires 3 model files in the same folder of vs_waifu2x.dll.
 
@@ -27,11 +27,13 @@ functions: Denoise, Resize
 
 ## Important Note
 
-- This filter is *very very slow*, much slower than the BM3D denoising filter implemented by me.
+- This filter is *very very slow*, much slower than my implementation of the BM3D denoising filter (https://github.com/HomeOfVapourSynthEvolution/VapourSynth-BM3D).
 
-- Few denoising parameters can be adjusted and the denoising is only applied to Y channel. Thus I would recommend BM3D for denoising purpose rather than waifu2x.Denoise, the denoising quality of both filters achieve the state of art.
+- Few denoising parameters can be adjusted and the denoising is only applied to Y channel. Thus I would recommend BM3D for general denoising purpose rather than waifu2x.Denoise, the denoising quality of both filters achieve the state of art.
 
-- The memory consumption can be very high due to large amount of buffers allocated during processing, and it will multiply if multiple VS threads is used. You can decrease the "block_width" and "block_height" to reduce memory consumption. Also you are able to employ the internal MT of waifu2x by setting "threads".
+- waifu2x.Denoise is specially trained to deal with JPEG compression artifacts, thus it can do a very good job to eliminate ringing artifacts.
+
+- The memory consumption can be very high due to large amount of buffers allocated during processing, and it will multiply if multiple VS threads is used. You can decrease "block_width" and "block_height" to reduce memory consumption. Also it's possible to employ the internal MT of waifu2x by setting "threads".
 
 ## Usage
 
@@ -56,8 +58,8 @@ waifu2x.Denoise(clip input[, int mode=1, int matrix=6, bint full, int block_widt
 
 - matrix:<br />
     Matrix coefficients for RGB input, default 6.<br />
-    The internal processing is always done in YUV color space, and only Y is processed, this specifies the matrix used for RGB<->YUV conversion.<br />
-    Since the model is trained on BT.601 YUV data, it might be best to always use 6.<br />
+    The internal processing is always done in YUV color space, and this specifies the matrix used for RGB<->YUV conversion.<br />
+    The model should be trained on BT.601 YUV data, so it might be best to always use 6.<br />
     The number is as specified in ISO/IEC 14496-10, with an additional one for OPP.<br />
       - 0 - GBR
       - 1 - bt709
@@ -78,24 +80,24 @@ waifu2x.Denoise(clip input[, int mode=1, int matrix=6, bint full, int block_widt
 - block_width, block_height:<br />
     The block size used in waifu2x, it splits the processed image into several sub-images, which can significantly reduce memory consumption, while slightly increases computational cost.<br />
     Set a smaller value to lower the memory consumption.<br />
-    0 means the block size is same as the image.<br />
+    0 means the block size is the image size with proper padding.<br />
     Negative value forces a specific block size.<br />
-    Positive value will be automatically adjusted to the closest optimal size.
+    Positive value will be automatically adjusted to the closest optimal size no larger than the set value, with proper padding.
 
 - threads:<br />
-    The number of threads for internal multi-thread processing, as an alternative to the VapourSynth frame-level MT.<br />
-    It will not increase memory consumption, but the performance is not that efficient, and the CPU usage is not stable.<br />
+    The number of threads used for internal multi-thread processing, as an alternative to the VapourSynth frame-level MT.<br />
+    It won't increase memory consumption, but the performance is not that efficient as that of the VS MT, and the CPU usage is not very stable.<br />
     It's recommended to use it for single image processing or previewing with vsedit, etc.<br />
     For video processing, it's better to use the VS MT. If needed, decrease block_width and block_height for less memory consumption.<br />
-    Positive value to specify the thread number to be used, 0 automatically detects the thread number.<br />
+    Set 0 to automatically detect the number of threads to be used.<br />
     Default is 1, thus only single-thread is used.
 
 ### Super-resolution filter
 
 This filter applies scaling in YUV color space.<br />
+For RGB input, it is automatically converted to YUV for processing, then converted back to RGB for output.<br />
 The Y channels is first scaled to 2x using nearest-neighborhood interpolation, then waifu2x is applied to convert the low-resolution image to the high-resolution one (though the image size is unchanged). If any custom scaling parameter (width, height, shift_w, shift_h, subwidth, subheight) is set, a post-scaling is applied to the high-resolution image to get the final output image.<br />
-The UV channels are scaled using Catmull-Rom (Bicubic, b=0, c=0.5) by default.<br />
-For RGB input, it is automatically converted to YUV for processing, then converted back to RGB for output.
+The UV channels are scaled using Catmull-Rom (Bicubic, b=0, c=0.5) by default.
 
 ```python
 waifu2x.Resize(clip input[, int width=input.width*2, int height=input.height*2, float shift_w=0, float shift_h=0, float subwidth=input.width, float subheight=input.height, string filter="bicubic", float filter_param_a=0, float filter_param_b=0.5, string filter_uv="bicubic", float filter_param_a_uv=0, float filter_param_b_uv=0.5, int subsample_w=input.format.subsampling_w, int subsample_h=input.format.subsampling_h, string chroma_loc_in="mpeg2", string chroma_loc_out=chroma_loc_in, int matrix=6, bint full, int block_width=1280, int block_height=1280, int threads=1])
