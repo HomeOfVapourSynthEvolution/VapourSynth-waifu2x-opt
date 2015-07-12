@@ -63,7 +63,10 @@ struct Waifu2x_Para
     int filter_uv = ZIMG_RESIZE_BICUBIC;
     double filter_param_a_uv = 0;
     double filter_param_b_uv = 0.5;
-    chroma_location chroma_loc = CHROMA_LOC_MPEG2;
+    int subsample_w = 0;
+    int subsample_h = 0;
+    chroma_location chroma_loc_in = CHROMA_LOC_MPEG2;
+    chroma_location chroma_loc_out = CHROMA_LOC_MPEG2;
 };
 
 

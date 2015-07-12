@@ -35,7 +35,7 @@ public:
     typedef Waifu2x_Data_Base _Mybase;
 
 public:
-    explicit Waifu2x_Denoise_Data(const VSAPI *_vsapi = nullptr, std::string _FunctionName = "Base", std::string _NameSpace = "waifu2x")
+    explicit Waifu2x_Denoise_Data(const VSAPI *_vsapi = nullptr, std::string _FunctionName = "Denoise", std::string _NameSpace = "waifu2x")
         : _Mybase(_vsapi, _FunctionName, _NameSpace)
     {}
 

@@ -94,7 +94,7 @@ int Waifu2x_Resize_Data::arguments_process(const VSMap *in, VSMap *out)
     }
     else if (para.subwidth < 0 && para.shift_w - para.subwidth >= vi->width)
     {
-        setError(out, "the source width set by \"shift_w\" and \"subwidth\" must be positive");
+        setError(out, "The source width set by \"shift_w\" and \"subwidth\" must be positive");
         return 1;
     }
 
@@ -107,7 +107,7 @@ int Waifu2x_Resize_Data::arguments_process(const VSMap *in, VSMap *out)
     }
     else if (para.subheight < 0 && para.shift_h - para.subheight >= vi->width)
     {
-        setError(out, "the source width set by \"shift_h\" and \"subheight\" must be positive");
+        setError(out, "The source width set by \"shift_h\" and \"subheight\" must be positive");
         return 1;
     }
 
@@ -126,7 +126,7 @@ int Waifu2x_Resize_Data::arguments_process(const VSMap *in, VSMap *out)
 
         if (para.filter < 0)
         {
-            setError(out, "invalid \'filter\' specified");
+            setError(out, "Invalid \'filter\' specified");
             return 1;
         }
     }
@@ -176,7 +176,7 @@ int Waifu2x_Resize_Data::arguments_process(const VSMap *in, VSMap *out)
 
         if (para.filter_uv < 0)
         {
-            setError(out, "invalid \'filter_uv\' specified");
+            setError(out, "Invalid \'filter_uv\' specified");
             return 1;
         }
     }
@@ -211,12 +211,40 @@ int Waifu2x_Resize_Data::arguments_process(const VSMap *in, VSMap *out)
         }
     }
 
-    // chroma_loc - data
-    auto chroma_loc_cstr = vsapi->propGetData(in, "chroma_loc", 0, &error);
+    // subsample_w - int
+    para.subsample_w = int64ToIntS(vsapi->propGetInt(in, "subsample_w", 0, &error));
 
     if (error)
     {
-        para.chroma_loc = para_default.chroma_loc;
+        para.subsample_w = vi->format->subSamplingW;
+    }
+    else if (vi->format->colorFamily != cmYUV && vi->format->colorFamily != cmYCoCg
+        && para.subsample_w != 0)
+    {
+        setError(out, "Invalid \'subsample_w\' specified for this color family, should be 0");
+        return 1;
+    }
+
+    // subsample_h - int
+    para.subsample_h = int64ToIntS(vsapi->propGetInt(in, "subsample_h", 0, &error));
+
+    if (error)
+    {
+        para.subsample_h = vi->format->subSamplingH;
+    }
+    else if (vi->format->colorFamily != cmYUV && vi->format->colorFamily != cmYCoCg
+        && para.subsample_h != 0)
+    {
+        setError(out, "Invalid \'subsample_h\' specified for the output color family, should be 0");
+        return 1;
+    }
+
+    // chroma_loc_in - data
+    auto chroma_loc_cstr = vsapi->propGetData(in, "chroma_loc_in", 0, &error);
+
+    if (error)
+    {
+        para.chroma_loc_in = para_default.chroma_loc_in;
     }
     else
     {
@@ -225,15 +253,42 @@ int Waifu2x_Resize_Data::arguments_process(const VSMap *in, VSMap *out)
 
         if (chroma_loc == "mpeg1")
         {
-            para.chroma_loc = CHROMA_LOC_MPEG1;
+            para.chroma_loc_in = CHROMA_LOC_MPEG1;
         }
         else if (chroma_loc == "mpeg2")
         {
-            para.chroma_loc = CHROMA_LOC_MPEG2;
+            para.chroma_loc_in = CHROMA_LOC_MPEG2;
         }
         else
         {
-            setError(out, "invalid \'chroma_loc\' specified, should be \'mpeg1\' or \'mpeg2\'");
+            setError(out, "Invalid \'chroma_loc_in\' specified, should be \'mpeg1\' or \'mpeg2\'");
+            return 1;
+        }
+    }
+
+    // chroma_loc_out - data
+    chroma_loc_cstr = vsapi->propGetData(in, "chroma_loc_out", 0, &error);
+
+    if (error)
+    {
+        para.chroma_loc_out = para_default.chroma_loc_out;
+    }
+    else
+    {
+        std::string chroma_loc = chroma_loc_cstr;
+        std::transform(chroma_loc.begin(), chroma_loc.end(), chroma_loc.begin(), tolower);
+
+        if (chroma_loc == "mpeg1")
+        {
+            para.chroma_loc_out = CHROMA_LOC_MPEG1;
+        }
+        else if (chroma_loc == "mpeg2")
+        {
+            para.chroma_loc_out = CHROMA_LOC_MPEG2;
+        }
+        else
+        {
+            setError(out, "Invalid \'chroma_loc_out\' specified, should be \'mpeg1\' or \'mpeg2\'");
             return 1;
         }
     }
@@ -261,24 +316,26 @@ void Waifu2x_Resize_Data::init(VSCore *core)
 
     double scaleH = static_cast<double>(dst_width) / subwidth;
     double scaleV = static_cast<double>(dst_height) / subheight;
-    double sub_w = 1 << vi->format->subSamplingW;
-    double sub_h = 1 << vi->format->subSamplingH;
+    double src_sub_w = 1 << vi->format->subSamplingW;
+    double src_sub_h = 1 << vi->format->subSamplingH;
+    double dst_sub_w = 1 << para.subsample_w;
+    double dst_sub_h = 1 << para.subsample_h;
 
-    bool sCLeftAlign = para.chroma_loc == CHROMA_LOC_MPEG2;
-    double sHCPlace = sCLeftAlign ? 0 : 0.5 - sub_w / 2;
+    bool sCLeftAlign = para.chroma_loc_in == CHROMA_LOC_MPEG2;
+    double sHCPlace = !sCLeftAlign ? 0 : 0.5 - src_sub_w / 2;
     double sVCPlace = 0;
-    bool dCLeftAlign = para.chroma_loc == CHROMA_LOC_MPEG2;
-    double dHCPlace = dCLeftAlign ? 0 : 0.5 - sub_w / 2;
+    bool dCLeftAlign = para.chroma_loc_out == CHROMA_LOC_MPEG2;
+    double dHCPlace = !dCLeftAlign ? 0 : 0.5 - dst_sub_w / 2;
     double dVCPlace = 0;
 
     int src_width_uv = src_width >> vi->format->subSamplingW;
     int src_height_uv = src_height >> vi->format->subSamplingH;
-    int dst_width_uv = dst_width >> vi->format->subSamplingW;
-    int dst_height_uv = dst_height >> vi->format->subSamplingH;
-    double shift_w_uv = ((shift_w - sHCPlace) * scaleH + dHCPlace) / scaleH / sub_w;
-    double shift_h_uv = ((shift_h - sVCPlace) * scaleV + dVCPlace) / scaleV / sub_h;
-    double subwidth_uv = subwidth / sub_w;
-    double subheight_uv = subheight / sub_h;
+    int dst_width_uv = dst_width >> para.subsample_w;
+    int dst_height_uv = dst_height >> para.subsample_h;
+    double shift_w_uv = ((shift_w - sHCPlace) * scaleH + dHCPlace) / scaleH / src_sub_w;
+    double shift_h_uv = ((shift_h - sVCPlace) * scaleV + dVCPlace) / scaleV / src_sub_h;
+    double subwidth_uv = subwidth / src_sub_w;
+    double subheight_uv = subheight / src_sub_h;
 
     // Additional parameters
     resize_post = !(dst_width == sr_width && dst_height == sr_height

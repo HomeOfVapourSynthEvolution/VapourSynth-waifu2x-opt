@@ -44,7 +44,7 @@ public:
     ZimgResizeContext *z_resize_uv = nullptr;
 
 public:
-    explicit Waifu2x_Resize_Data(const VSAPI *_vsapi = nullptr, std::string _FunctionName = "Base", std::string _NameSpace = "waifu2x")
+    explicit Waifu2x_Resize_Data(const VSAPI *_vsapi = nullptr, std::string _FunctionName = "Resize", std::string _NameSpace = "waifu2x")
         : _Mybase(_vsapi, _FunctionName, _NameSpace)
     {}
 
@@ -122,7 +122,18 @@ public:
         }
     }
 
+    static const VSFormat *NewFormat(const _Mydata &d, const VSFormat *f, VSCore *core, const VSAPI *vsapi)
+    {
+        return vsapi->registerFormat(f->colorFamily, f->sampleType, f->bitsPerSample,
+            d.para.subsample_w, d.para.subsample_h, core);
+    }
+
 protected:
+    virtual void NewFormat() override
+    {
+        dfi = NewFormat(d, fi, core, vsapi);
+    }
+
     virtual void NewFrame() override
     {
         _NewFrame(d.para.width, d.para.height, false);

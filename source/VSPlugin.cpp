@@ -87,6 +87,7 @@ static void VS_CC Waifu2x_Resize_Init(VSMap *in, VSMap *out, void **instanceData
     Waifu2x_Resize_Data *d = reinterpret_cast<Waifu2x_Resize_Data *>(*instanceData);
 
     VSVideoInfo dvi = *(d->vi);
+    dvi.format = Waifu2x_Resize_Process::NewFormat(*d, d->vi->format, core, vsapi);
     dvi.width = d->para.width;
     dvi.height = d->para.height;
 
@@ -173,7 +174,10 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegiste
         "filter_uv:data:opt;"
         "filter_param_a_uv:float:opt;"
         "filter_param_b_uv:float:opt;"
-        "chroma_loc:data:opt;"
+        "subsample_w:int:opt;"
+        "subsample_h:int:opt;"
+        "chroma_loc_in:data:opt;"
+        "chroma_loc_out:data:opt;"
         "matrix:int:opt;"
         "full:int:opt;"
         "block_width:int:opt;"
