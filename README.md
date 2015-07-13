@@ -8,7 +8,7 @@ waifu2x image super-resolution/denoise filter for VapourSynth, based on the waif
 
 It's a high quality image restoration filter for anime, mainly for super-resolution, also contains 2 denoising modes.
 
-This plugin employs waifu2x-opt library (https://github.com/logicmachine/waifu2x-opt) and zimg library (https://github.com/sekrit-twc/zimg) for scaling related stuffs. Thanks for their works!
+This plugin employs [waifu2x-opt library](https://github.com/logicmachine/waifu2x-opt) and [zimg library](https://github.com/sekrit-twc/zimg) for scaling related stuffs. Thanks for their works!
 
 Note that the waifu2x-opt is dynamic linked while the zimg is static linked.
 
@@ -27,7 +27,7 @@ functions: Denoise, Resize
 
 ## Important Note
 
-- This filter is *very very slow*, much slower than my implementation of the BM3D denoising filter (https://github.com/HomeOfVapourSynthEvolution/VapourSynth-BM3D).
+- This filter is *very very slow*, much slower than my implementation of the [BM3D denoising filter](https://github.com/HomeOfVapourSynthEvolution/VapourSynth-BM3D).
 
 - Few denoising parameters can be adjusted and the denoising is only applied to Y channel. Thus I would recommend BM3D for general denoising purpose rather than waifu2x.Denoise, the denoising quality of both filters achieve the state of art.
 
